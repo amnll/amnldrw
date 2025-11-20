@@ -242,7 +242,7 @@ export default function Canvas({
         const ctx = canvasRef.current.getContext('2d');
         ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
         saveHistory();
-        if (socket && socket.connected) socket.emit('clear');
+        // socket.emit('clear'); // Disabled to prevent clearing for everyone
     }, [clearTrigger]);
 
     useEffect(() => {
