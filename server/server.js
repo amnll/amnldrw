@@ -36,6 +36,14 @@ io.on('connection', (socket) => {
         io.emit('clear');
     });
 
+    socket.on('clear_user_history', (userId) => {
+        if (!userId) return;
+        // Remove all strokes created by this user
+        drawingHistory = drawingHistory.filter(item => item.userId !== userId);
+        // Broadcast the updated history to EVERYONE (so they redraw without the deleted lines)
+        io.emit('history_update', drawingHistory);
+    });
+
     socket.on('disconnect', () => {
         connectedUsers--;
         io.emit('users_count', connectedUsers);

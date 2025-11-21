@@ -24,6 +24,18 @@ export default function Canvas({
     const isDrawing = useRef(false);
     const lastPos = useRef({ x: 0, y: 0 });
 
+    // Persistent User ID
+    const [userId, setUserId] = useState(null);
+
+    useEffect(() => {
+        let storedId = localStorage.getItem('drawAppUserId');
+        if (!storedId) {
+            storedId = Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('drawAppUserId', storedId);
+        }
+        setUserId(storedId);
+    }, []);
+
     // History for Undo/Redo (Local)
     const [history, setHistory] = useState([]);
     const [historyStep, setHistoryStep] = useState(-1);
@@ -76,19 +88,25 @@ export default function Canvas({
 
         const handleHistory = (historyData) => {
             const ctx = canvasRef.current.getContext('2d');
+            // Clear first to ensure clean slate for history redraw
+            ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+
             historyData.forEach(data => {
                 drawLine(ctx, data.x0, data.y0, data.x1, data.y1, data.color, data.size, data.tool, false);
             });
+            saveHistory();
         };
 
         socket.on('draw', handleRemoteDraw);
-        socket.on('clear', handleRemoteClear);
+        socket.on('clear', handleRemoteClear); // Keep for legacy/admin clear if needed
         socket.on('history', handleHistory);
+        socket.on('history_update', handleHistory); // New event for partial updates
 
         return () => {
             socket.off('draw', handleRemoteDraw);
             socket.off('clear', handleRemoteClear);
             socket.off('history', handleHistory);
+            socket.off('history_update', handleHistory);
         };
     }, [socket]);
 
@@ -153,7 +171,7 @@ export default function Canvas({
         ctx.globalCompositeOperation = 'source-over';
 
         if (emit && socket && socket.connected) {
-            socket.emit('draw', { x0, y0, x1, y1, color, size, tool });
+            socket.emit('draw', { x0, y0, x1, y1, color, size, tool, userId });
         }
     };
 
@@ -239,10 +257,20 @@ export default function Canvas({
 
     useEffect(() => {
         if (clearTrigger === 0) return;
-        const ctx = canvasRef.current.getContext('2d');
-        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-        saveHistory();
-        // socket.emit('clear'); // Disabled to prevent clearing for everyone
+
+        // Optimistic local clear (optional, but waiting for server is safer for sync)
+        // const ctx = canvasRef.current.getContext('2d');
+        // ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        // saveHistory();
+
+        if (socket && socket.connected) {
+            socket.emit('clear_user_history', userId);
+        } else {
+            // Offline fallback: just clear everything locally
+            const ctx = canvasRef.current.getContext('2d');
+            ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+            saveHistory();
+        }
     }, [clearTrigger]);
 
     useEffect(() => {
